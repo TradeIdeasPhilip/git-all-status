@@ -42,6 +42,27 @@ export function tally(counts: Counts, repo: RepoStatus): void {
   if (categories['not-master']) counts.notMaster++;
 }
 
+/** Oldest first. Ties (and the rare unknown date) go by path. */
+export function compareRepos(a: RepoStatus, b: RepoStatus): number {
+  const byDate = (a.date ?? 0) - (b.date ?? 0);
+  if (byDate !== 0) {
+    return byDate;
+  }
+  return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+}
+
+/** Local time, fixed width so the list lines up: 2026-10-19 02:20 */
+function formatDate(date: number | undefined): string {
+  if (date === undefined) {
+    return '????-??-?? ??:??';
+  }
+  const d = new Date(date);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+}
+
 /** One line per repository, whatever got it listed. */
 export function formatLine(repo: RepoStatus): string {
   const details: string[] = [];
@@ -58,5 +79,11 @@ export function formatLine(repo: RepoStatus): string {
     // Last, because it can be long.
     if (repo.fetchError !== undefined) details.push(`fetch failed: ${repo.fetchError}`);
   }
-  return [repo.path, repo.urlType, repo.branch, details.join(', ') || 'ok'].join('  ');
+  return [
+    formatDate(repo.date),
+    repo.path,
+    repo.urlType,
+    repo.branch,
+    details.join(', ') || 'ok',
+  ].join('  ');
 }

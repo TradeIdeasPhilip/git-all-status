@@ -1,23 +1,27 @@
 import { logUpdateStderr as logUpdate } from 'log-update';
+import sliceAnsi from 'slice-ansi';
+import stringWidth from 'string-width';
 import { formatGrouped } from './format.js';
 import { describeListing, type Options } from './options.js';
-import type { ScanState } from './types.js';
+import { compareRepos, formatLine } from './report.js';
+import type { RepoStatus, ScanState } from './types.js';
 
-// 60Hz, same cadence as a browser requestAnimationFrame loop. A handful of
+// 60Hz, same cadence as a browser requestAnimationFrame loop. A screenful of
 // short text lines is cheap to write, so there's no need to throttle harder.
 const RENDER_INTERVAL_MS = 1000 / 60;
 
-function buildFrame(state: ScanState, options: Options): string {
+function buildSummary(state: ScanState, options: Options): string[] {
   const stream = process.stderr;
   const n = (value: number) => formatGrouped(value, 0, stream);
-  const seconds = (startTime: number, decimals: number) =>
-    formatGrouped((Date.now() - startTime) / 1000, decimals, stream);
+  const elapsedSeconds = (Date.now() - state.startTime) / 1000;
   const counts = state.counts;
 
   const lines: string[] = [
-    `Start time ${new Date(state.startTime).toLocaleString()}, ${seconds(state.startTime, 3)} seconds ${
-      state.done ? 'total' : 'ago'
-    }.`,
+    `Start time ${new Date(state.startTime).toLocaleString()}, ${formatGrouped(
+      elapsedSeconds,
+      3,
+      stream,
+    )} seconds ${state.done ? 'total' : 'ago'}.`,
     `Directories scanned: ${n(state.directoriesScanned)}`,
     `Symbolic links skipped: ${n(state.symlinksSkipped)}`,
   ];
@@ -56,30 +60,51 @@ function buildFrame(state: ScanState, options: Options): string {
   if (!options.fetch) {
     lines.push('Servers not contacted (--no-fetch).');
   }
-
-  if (state.done) {
-    if (state.interrupted) {
-      lines.push('Interrupted.');
-    }
-  } else {
-    lines.push(state.walkDone ? 'Scan finished, waiting for git.' : `Scanning ${state.currentPath}`);
-    for (const [repoPath, activity] of state.activity) {
-      lines.push(`  ${activity.command} ${repoPath} ${seconds(activity.startTime, 1)}s`);
-    }
+  if (state.interrupted) {
+    lines.push('Interrupted.');
   }
+  return lines;
+}
 
-  return lines.join('\n');
+/** What's happening right now. Only shown while running. */
+function buildProgress(state: ScanState): string[] {
+  const lines = [
+    state.walkDone ? 'Scan finished, waiting for git.' : `Scanning ${state.currentPath}`,
+  ];
+  if (state.activity.size > 0) {
+    // Longest-running first: if something is stuck, that's what you'll see.
+    const running = [...state.activity]
+      .sort(([, a], [, b]) => a.startTime - b.startTime)
+      .map(([repoPath, activity]) => {
+        const seconds = formatGrouped((Date.now() - activity.startTime) / 1000, 1, process.stderr);
+        return `${activity.command} ${repoPath} ${seconds}s`;
+      });
+    lines.push(`Running: ${running.join(', ')}`);
+  }
+  return lines;
 }
 
 /**
- * The live status at the bottom of the terminal, with permanent lines
- * printed above it as we go.
+ * Cut a line to the terminal's width. log-update erases by counting lines,
+ * and a line that wraps would throw that count off once the display fills
+ * the screen.
+ */
+function fitWidth(line: string, columns: number): string {
+  return stringWidth(line) <= columns ? line : sliceAnsi(line, 0, columns - 1) + '…';
+}
+
+/**
+ * The live display: the list of repositories so far, sorted, with the
+ * summary and progress below it. When it's all done, the full list goes to
+ * stdout and the summary to stderr, as permanent lines.
  */
 export class Display {
   readonly #state: ScanState;
   readonly #options: Options;
-  /** Only draw the live status if someone is there to watch it. */
+  /** Only draw the live display if someone is there to watch it. */
   readonly #live = process.stderr.isTTY === true;
+  /** Oldest first. */
+  readonly #listed: RepoStatus[] = [];
   #interval: NodeJS.Timeout | undefined;
 
   constructor(state: ScanState, options: Options) {
@@ -97,22 +122,28 @@ export class Display {
     }
   }
 
+  /** Adds a repository to the list, in date order. */
+  list(repo: RepoStatus): void {
+    this.#listed.push(repo);
+    this.#listed.sort(compareRepos);
+  }
+
   /**
-   * Prints a permanent line. If it's going to the same terminal as the
-   * status, the status gets out of the way first and is redrawn below it.
+   * Prints a permanent line on stderr. The live display gets out of the way
+   * first and is redrawn below it.
    */
-  printLine(line: string, stream: NodeJS.WriteStream = process.stdout): void {
-    const inTheWay = this.#live && !this.#state.done && stream.isTTY === true;
+  printMessage(line: string): void {
+    const inTheWay = this.#live && !this.#state.done;
     if (inTheWay) {
       logUpdate.clear();
     }
-    stream.write(line + '\n');
+    process.stderr.write(line + '\n');
     if (inTheWay) {
       this.#redraw();
     }
   }
 
-  /** Replaces the live status with the final summary. Safe to call twice. */
+  /** Replaces the live display with the final list and summary. Safe to call twice. */
   finish(): void {
     if (this.#state.done) {
       return;
@@ -123,10 +154,28 @@ export class Display {
       logUpdate.clear();
       logUpdate.done();
     }
-    process.stderr.write(buildFrame(this.#state, this.#options) + '\n');
+    for (const repo of this.#listed) {
+      process.stdout.write(formatLine(repo) + '\n');
+    }
+    process.stderr.write(buildSummary(this.#state, this.#options).join('\n') + '\n');
   }
 
   #redraw(): void {
-    logUpdate(buildFrame(this.#state, this.#options));
+    const stream = process.stderr;
+    const columns = stream.columns || 80;
+    const rows = stream.rows || 24;
+    const status = [...buildSummary(this.#state, this.#options), ...buildProgress(this.#state)];
+
+    // log-update adds a newline at the end, so rows - 1 lines fill the
+    // screen. If the list doesn't fit, the oldest wait for the final output,
+    // where they'll be at the top of the list, likely scrolled off anyway.
+    const room = rows - 1 - status.length;
+    let list = this.#listed.map(formatLine);
+    if (list.length > room) {
+      const hidden = list.length - Math.max(0, room - 1);
+      list = room > 0 ? [`(${hidden} older not shown yet)`, ...list.slice(hidden)] : [];
+    }
+
+    logUpdate([...list, ...status].map((line) => fitWidth(line, columns)).join('\n'));
   }
 }

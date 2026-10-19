@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "log-update": "^6.1.0",
+    "slice-ansi": "^7.1.2",
+    "string-width": "^7.2.0",
     "tsx": "^4.19.2"
   },
   "devDependencies": {

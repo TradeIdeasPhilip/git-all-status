@@ -1,10 +1,10 @@
 import { killAllGit } from './git.js';
 import { parseCommandLine } from './options.js';
-import { OrderedPool } from './pool.js';
+import { Pool } from './pool.js';
 import { Display } from './render.js';
-import { formatLine, shouldList, tally } from './report.js';
+import { shouldList, tally } from './report.js';
 import { checkRepository } from './repository.js';
-import { createScanState, type RepoStatus } from './types.js';
+import { createScanState } from './types.js';
 import { walkRoot } from './walk.js';
 
 /**
@@ -28,12 +28,7 @@ async function main(): Promise<void> {
 
   const state = createScanState();
   const display = new Display(state, options);
-  const pool = new OrderedPool<RepoStatus>(PARALLEL_CHECKS, (repo) => {
-    if (shouldList(repo, options)) {
-      state.counts.listed++;
-      display.printLine(formatLine(repo));
-    }
-  });
+  const pool = new Pool(PARALLEL_CHECKS);
 
   // git runs in its own session (see runGit), so Ctrl-C only reaches us.
   const interrupt = () => {
@@ -53,11 +48,14 @@ async function main(): Promise<void> {
         pool.add(async () => {
           const repo = await checkRepository(repoPath, options.fetch, state);
           tally(state.counts, repo);
-          return repo;
+          if (shouldList(repo, options)) {
+            state.counts.listed++;
+            display.list(repo);
+          }
         });
       });
       if (problem !== undefined) {
-        display.printLine(`git-all-status: ${problem}`, process.stderr);
+        display.printMessage(`git-all-status: ${problem}`);
         process.exitCode = 1;
       }
     }

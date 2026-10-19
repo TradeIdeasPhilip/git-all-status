@@ -39,10 +39,20 @@ skipped and counted. For each repository it runs "git fetch --all" to see
 what's new on the server, then "git status".
 
 Each repository listed gets one line:
-  <path>  <url type>  <branch>  <details>
+  <date>  <path>  <url type>  <branch>  <details>
 The url type is ssh, https, ssh+https, other or none. The details are some
 of: no remote, no upstream, upstream gone, ahead N, behind N, N changed,
 N untracked, fetch failed: <reason>. Or just ok.
+
+The list is sorted by date, oldest first, like an inbox: the newest stuff
+ends up at the bottom, right above the summary. The date is when whatever
+needs attention last changed, the newest of:
+  - uncommitted or untracked files: when they were last modified
+    (a deleted file: when its directory changed),
+  - commits to push: the newest of them,
+  - commits to pull: the newest of them, i.e. what's new on the server.
+If none of those apply, it's the last commit. With no commits at all, it's
+when the directory itself was modified.
 
 What to list (combine as many as you like):
   --show-all-not-connected   No remote, the branch has no upstream, the
@@ -67,7 +77,7 @@ Other options:
   --            Everything after this is a directory, even if it starts
                 with -.
 
-Repository lines go to stdout. The live status and summary go to stderr.
+The final list goes to stdout. The live display and summary go to stderr.
 `;
 
 /**

@@ -26,6 +26,11 @@ export interface RepoStatus {
   /** Staged, modified, deleted, renamed or conflicted files. */
   changed: number;
   untracked: number;
+  /**
+   * When whatever needs attention last changed, in ms since the epoch. The
+   * list is sorted by this, oldest first, like an inbox.
+   */
+  date: number | undefined;
   /** Set when git couldn't tell us anything useful about this repository. */
   error: string | undefined;
 }
