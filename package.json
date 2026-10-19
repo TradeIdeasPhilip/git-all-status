@@ -1,0 +1,22 @@
+{
+  "name": "git-all-status",
+  "version": "0.1.0",
+  "description": "Status across many git repositories, with a live progress display",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "git-all-status": "bin/git-all-status.js"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "log-update": "^6.1.0",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
