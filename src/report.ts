@@ -51,16 +51,16 @@ export function compareRepos(a: RepoStatus, b: RepoStatus): number {
   return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 }
 
-/** Local time, fixed width so the list lines up: 2026-10-19 02:20 */
+/** Local time, MySQL DATETIME style, fixed width so the list lines up: 2026-10-19 02:20:05 */
 function formatDate(date: number | undefined): string {
   if (date === undefined) {
-    return '????-??-?? ??:??';
+    return '????-??-?? ??:??:??';
   }
   const d = new Date(date);
   const pad = (value: number) => String(value).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
     d.getHours(),
-  )}:${pad(d.getMinutes())}`;
+  )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 /** One line per repository, whatever got it listed. */

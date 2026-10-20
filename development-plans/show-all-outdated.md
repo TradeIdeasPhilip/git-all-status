@@ -1,0 +1,2 @@
+Consider an option `--show-all-outdated` which would use `npm obsolete` to check each repository for outdated packages.
+(These are packages which don't update by default because of semantic versioning.)

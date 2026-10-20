@@ -8,11 +8,19 @@ Shows live status while it runs, like [du](https://github.com/TradeIdeasPhilip/d
 
 ```
 npm install
-npm link                  # once: puts git-all-status on your PATH
+ln -s "$PWD/bin/git-all-status.js" ~/.local/bin/git-all-status   # once
 git-all-status ~/Documents/fun-git
 ```
 
-Or without linking: `npm start -- [options] [directory ...]`.
+The symlink is the durable way to install it: the command then works in every terminal window, whichever Node version nvm has selected there, and keeps working after Node upgrades.
+The script runs with whichever `node` is current, and loads everything else from this project's `node_modules`.
+If `~/.local/bin` isn't on your PATH yet, add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc`, or use any other directory that is on your PATH.
+
+Avoid `npm link` if you use nvm.
+nvm gives every Node version its own global bin directory, so the command only exists in windows using the version that was current when you linked it.
+`rehash` won't help: the other versions' windows don't have that directory on their PATH at all.
+
+Or without installing anything: `npm start -- [options] [directory ...]`.
 Relative paths are relative to where you typed the command.
 
 ## Output
@@ -20,9 +28,9 @@ Relative paths are relative to where you typed the command.
 One line per repository, sorted like an inbox: oldest at the top, newest at the bottom, right above the summary.
 
 ```
-2025-03-02 14:07  curves  none  main  no remote, 5 changed, 1 untracked
-2026-09-30 21:15  ts-gs  https  master  behind 2, 3 changed
-2026-10-19 01:58  du  ssh  master  3 changed
+2025-03-02 14:07:31  curves  none  main  no remote, 5 changed, 1 untracked
+2026-09-30 21:15:02  ts-gs  https  master  behind 2, 3 changed
+2026-10-19 01:58:47  du  ssh  master  3 changed
 ```
 
 `<date>  <path>  <url type>  <branch>  <details>`.
